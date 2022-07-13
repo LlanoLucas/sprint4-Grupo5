@@ -1,30 +1,72 @@
-from csv import reader
+import csv
+import sys
+from datetime import datetime
 
 
-dni = input("Ingrese un DNI: \n")
-salida = input("Ingrese el tipo de salida (PANTALLA o CSV): \n")
-tipo = input("Ingrese tipo de cheque (EMITIDO o DEPOSITADO): \n")
-#estado = input("Ingrese el estado del cheque (PENDIENTE, APROBADO o RECHAZADO): \n")
+argumentos = sys.argv[1:]
+nombre_archivo = argumentos[0]
+dni_filtro = argumentos[1]
+salida = argumentos[2]
+tipo_cheque_filtro = argumentos[3]
+estado_filtro = None
+rango_fecha = None
 
-with open('test.csv', 'r') as csv_file:
-    # Passing the cav_reader object to list() to get a list of lists
-    csv_reader = reader(csv_file)
-    #convertir el objeto csv.reader en una lista de listas donde cada elemetno de la listasignifica una fila de CSV y cada elemento de la lista representa una celda o columna de una fila
-    list_of_rows = list(csv_reader)
-    for i in range(7):
-        if dni == list_of_rows[i+1][8]:
-            nrochek = list_of_rows[i+1][0]
-            cuentaorigen = list_of_rows[i+1][3]
-            for j in range(7):
-                if list_of_rows[j+1][3] == cuentaorigen and list_of_rows[j+1][0] == nrochek:
-                    print("ERROR. No se puede repetir el numero de cheque de una misma cuenta")
-            print("Encontre dni")
-            if salida == 'PANTALLA':
-                print(list_of_rows[i+1])
-            elif salida == 'CSV':
-                print("importar a un archivo cvs (?)")
-            else:
-                print("El dato de salida no es valido")
-        else:
-            print("Numero de DNI no encontrado")
+if len(argumentos) == 5:
+    opcional = argumentos[4]
+    tipos_estado = ["PENDIENTE", "APROBADO", "RECHAZADO"]
+    if opcional in tipos_estado:
+        estado_filtro = opcional
+    else:
+        rango_fecha = opcional.split(':')
+        rango_fecha_ini = datetime.timestamp(datetime.strptime(rango_fecha[0], '%d-%m-%Y'))
+        rango_fecha_fin = datetime.timestamp(datetime.strptime(rango_fecha[0], '%d-%m-%Y'))
+elif len(argumentos) == 6:
+    estado_filtro = argumentos[4]
+    rango_fecha = argumentos[5].split(':')
+    rango_fecha_ini = datetime.timestamp(datetime.strptime(rango_fecha[0], '%d-%m-%Y'))
+    rango_fecha_fin = datetime.timestamp(datetime.strptime(rango_fecha[0], '%d-%m-%Y'))
 
+
+output = []
+
+with open(nombre_archivo, "r") as archivo:
+    reader_csv = csv.reader(archivo, delimiter = ',')
+    output.append(next(reader_csv, None))
+    for fila in reader_csv:
+        fecha = fila[6]
+        dni = fila[8]
+        tipo_cheque = fila[9]
+        estado_cheque = fila[10]
+        if dni != dni_filtro or tipo_cheque != tipo_cheque_filtro:
+            continue #me salteo la fila y voy a la siguiente
+        if estado_filtro is not None and estado_cheque != estado_filtro:
+            continue
+        if rango_fecha and (fecha < rango_fecha_ini or fecha > rango_fecha_fin):
+            continue
+        
+        output.append(fila)
+
+
+#no se puede repetir combinacion de mimso DNI NUMERO_CUENTA y NUMERO_CHEQUE
+rdos = set()
+for nro_fila, fila in enumerate(output):
+    nro_cheque = fila[0]
+    nro_cuenta = fila[3]
+    dni = fila[8]
+    if (nro_cheque, nro_cuenta, dni) in rdos:
+        output.append(f"Hay inconsistencia en la fila {nro_fila}")
+    else:
+        rdos.add((nro_cheque, nro_cuenta, dni))
+
+
+
+if salida == "PANTALLA":
+    for fila in output:    
+        print(output)
+elif salida == "CSV":
+    filtrados = [[fila[3], fila[5], fila[6], fila[7]] for fila in output]
+    dt = datetime.now()
+    dt = dt.strftime("%d-%m-%Y")
+    with open(f'{fila[8]}-{dt}.csv', 'w', newline='') as archivo_salida:
+        writer = csv.writer(archivo_salida)
+        writer.writerows(filtrados)
